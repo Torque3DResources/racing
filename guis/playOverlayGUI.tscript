@@ -1,0 +1,74 @@
+function racingGame::Playgui_onWake()
+{
+    Canvas.pushDialog(playOverlayGUI);
+    raceClock.setTime(0);
+    clearRacingScores();
+}
+
+function playOverlayGUI::onWake(%this)
+{
+    
+}
+
+function playOverlayGUI::onSleep(%this)
+{
+    
+}
+
+function clientCMDStartClock()
+{
+    raceClock.pause = false;
+}
+
+function clientCMDStopClock()
+{
+    raceClock.pause = true;
+}
+
+
+function clientCMDSetLaps(%cur,%max)
+{
+    raceLapCount.text = %cur @"/"@ %max;
+}
+
+function clearRacingScores()
+{
+   if(!isObject(racingGame.scoreList))
+   {
+      racingGame.scoreList = new ArrayObject();
+   }
+   
+    racingGame.scoreList.empty();
+    racingGame.refreshScores();
+}
+
+function clientCMDclearRacingScores()
+{
+    clearRacingScores();
+}
+
+function clientCMDaddRacingScore(%name, %score)
+{
+   if(!isObject(racingGame.scoreList))
+   {
+      racingGame.scoreList = new ArrayObject();
+   }
+   racingGame.scoreList.add(%name, %score);
+   racingGame.refreshScores();
+}
+function racingGame::refreshScores(%this)
+{
+   scoreListText.setText("");
+
+   %scoreTrackerText = "";
+   for(%i=0; %i < %this.scoreList.count(); %i++)
+   {      
+      %name = %this.scoreList.getKey(%i);
+      %score = %this.scoreList.getValue(%i);
+      
+      //append each quest's description and a new line so it formats correctly for display
+      %scoreTrackerText = %scoreTrackerText @ %name SPC %score @"\n";
+   }
+   scoreListText.setText(%scoreTrackerText);
+   scoreListText.forceReflow();
+}

@@ -1,0 +1,58 @@
+
+// The general flow of a gane - server's creation, loading and hosting clients, and then destruction is as follows:
+
+// First, a client will always create a server in the event that they want to host a single player
+// game. Torque3D treats even single player connections as a soft multiplayer game, with some stuff
+// in the networking short-circuited to sidestep around lag and packet transmission times.
+
+// initServer() is called, loading the default server scripts.
+// After that, if this is a dedicated server session, initDedicated() is called, otherwise initClient is called
+// to prep a playable client session.
+
+// When a local game is started - a listen server - via calling StartGame() a server is created and then the client is
+// connected to it via createAndConnectToLocalServer().
+
+function racing::onCreate( %this )
+{
+}
+
+function racing::onDestroy( %this )
+{
+}
+
+function racing::initServer(%this)
+{
+   //server scripts
+    %this.queueExec("./scripts/server/camera");
+    %this.queueExec("./scripts/server/commands");
+    %this.queueExec("./scripts/server/spawn");
+    %this.queueExec("./scripts/server/triggers");
+   
+    %this.queueExec("./scripts/shared/racingGame");
+}
+
+function racing::onCreateGameServer(%this)
+{
+    %this.registerDatablock("./datablocks/followcam");
+    %this.registerDatablock("./datablocks/triggers");
+}
+
+function racing::onDestroyGameServer(%this)
+{
+}
+
+function racing::initClient(%this)
+{
+    %this.queueExec("./scripts/client/profiles");
+    %this.queueExec("./guis/playOverlayGUI.gui");
+    %this.queueExec("./guis/playOverlayGUI");
+    %this.queueExec("./scripts/shared/racingGame");
+}
+
+function racing::onCreateClientConnection(%this)
+{
+}
+
+function racing::onDestroyClientConnection(%this)
+{
+}

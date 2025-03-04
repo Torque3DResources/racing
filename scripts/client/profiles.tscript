@@ -1,0 +1,10 @@
+// ---------------------------------------------------------------------------
+// Defaults
+// ---------------------------------------------------------------------------
+singleton GuiControlProfile( RaceDefaultProfile )
+{
+   category = "RaceUI";
+   fontSize = 36;
+   modal = false;
+   fontColors[0] = "0 255 0 255";
+};

@@ -1,0 +1,456 @@
+//-----------------------------------------------------------------------------
+// Copyright (c) 2012 GarageGames, LLC
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to
+// deal in the Software without restriction, including without limitation the
+// rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+// sell copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+// IN THE SOFTWARE.
+//-----------------------------------------------------------------------------
+
+// ----------------------------------------------------------------------------
+// racingGame
+// ----------------------------------------------------------------------------
+// Depends on methods found in gameCore.cs.  Those added here are specific to
+// this game type and/or over-ride the "default" game functionaliy.
+//
+// The desired Game Type must be added to each mission's LevelInfo object.
+//   - gameType = "Deathmatch";
+// If this information is missing then the GameCore will default to Deathmatch.
+// ----------------------------------------------------------------------------
+if(!isObject(racingGame))
+   new GameMode(racingGame){};
+
+//-----------------------------------------------------------------------------
+// The server has started up so do some game start up
+//-----------------------------------------------------------------------------
+function racingGame::onMissionStart(%this)
+{
+   //set up the game and game variables
+   %this.initGameVars();
+
+   %this.Duration = 30 * 60;
+   %this.EndGameScore = 5;
+   %this.EndGamePause = 10;
+   %this.AllowCycling = false;  // Is mission cycling allowed?
+   %this.racersFinished = 0;
+   //echo (%game @"\c4 -> "@ %game.class @" -> GameCore::onStartGame");
+   if (%this.Running)
+   {
+      error("startGame: End the game first!");
+      return;
+   }
+
+   // Inform the client we're starting up
+   for (%clientIndex = 0; %clientIndex < ClientGroup.getCount(); %clientIndex++)
+   {
+      %cl = ClientGroup.getObject(%clientIndex);
+      commandToClient(%cl, 'GameStart');
+
+      // Other client specific setup..
+      %cl.laps = 0;
+   }
+
+   // Start the game timer
+   if (%this.Duration)
+      %this.Schedule = schedule(%this.Duration * 1000, 0, "onGameDurationEnd");
+      
+   %this.Running = true;
+}
+
+function racingGame::onMissionEnded(%this)
+{
+   if (!%this.Running)
+   {
+      error("endGame: No game running!");
+      return;
+   }
+
+   // Stop any game timers
+   cancel(%this.Schedule);
+
+   for (%clientIndex = 0; %clientIndex < ClientGroup.getCount(); %clientIndex++)
+   {
+      %cl = ClientGroup.getObject(%clientIndex);
+      commandToClient(%cl, 'GameEnd', %this.EndGamePause);
+   }
+
+   %this.Running = false;
+   %this.Cycling = false;
+}
+
+function racingGame::onMissionReset(%this)
+{
+   // Called by resetMission(), after all the temporary mission objects
+   // have been deleted.
+   %this.initGameVars();
+
+   %this.Duration = %this.duration;
+   %this.EndGameScore = %this.endgameScore;
+   %this.EndGamePause = %this.endgamePause;
+}
+
+function racingGame::initGameVars(%this)
+{   
+   //-----------------------------------------------------------------------------
+   // What kind of "camera" is spawned is either controlled directly by the
+   // SpawnSphere or it defaults back to the values set here. This also controls
+   // which SimGroups to attempt to select the spawn sphere's from by walking down
+   // the list of SpawnGroups till it finds a valid spawn object.
+   // These override the values set in core/scripts/server/spawn.cs
+   //-----------------------------------------------------------------------------
+   %this.defaultCameraClass = "Camera";
+   %this.defaultCameraDataBlock = "Observer";
+   %this.defaultCameraSpawnGroups = "CameraSpawnPoints PlayerSpawnPoints PlayerDropPoints";
+
+   // Set the gameplay parameters
+   %this.Duration = 30 * 60;
+   %this.EndGameScore = 5;
+   %this.EndGamePause = 10;
+   %this.AllowCycling = false;  // Is mission cycling allowed?
+   %this.DeathDuration = 10000;
+   
+   %this.playersJoined = 0;
+   %this.startRaceCount = 4;
+   %this.maxLaps = 3;
+}
+
+function racingGame::onGameDurationEnd(%this)
+{
+   // This "redirect" is here so that we can abort the game cycle if
+   // the %this.Duration variable has been cleared, without having
+   // to have a function to cancel the schedule.
+
+   if (%this.Duration && !(EditorIsActive() && GuiEditorIsActive()))
+      %this.onGameDurationEnd();
+}
+
+function racingGame::onClientEnterGame(%this, %client)
+{        
+   %this.GetMaxTriggers();
+   // Setup game parameters, the onConnect method currently starts
+   // everyone with a 0 score.
+   %client.laps = 0;
+   %client.racer = %this.playersJoined;
+   %this.playersJoined++;
+   
+   //Set the player name based on the client's connection data
+   %client.setPlayerName(%client.connectData);
+   cancel(%this.countDown);
+   if (isObject(startingLights))
+      startingLights.callOnChildren("setSkinName","red");
+   if (%this.playersJoined >= %this.startRaceCount)
+   {
+        %this.startCountdown();
+   }
+   else
+   {
+        %this.countDown = %this.schedule(10000,"startCountdown");
+   }
+   commandToClient(%client,'SetLaps',0,%this.maxLaps);
+}
+
+function racingGame::startCountdown(%this, %mark)
+{
+    %matlist = "yellow green";
+    
+   if (isObject(startingLights))
+      startingLights.callOnChildren("setSkinName", getword(%matlist, %mark));
+      
+    if (%mark<1)
+    {
+        %this.schedule(5000,"startCountdown",%mark++); 
+    }
+    else
+    {        
+        for (%clientIndex = 0; %clientIndex < ClientGroup.getCount(); %clientIndex++)
+        {
+            %client = ClientGroup.getObject(%clientIndex);
+            %client.setControlObject(%client.player);
+            commandToClient(%client,'startClock');
+        }
+        %this.LapStartTime = $Sim::Time;
+    }
+}
+
+function trunc(%n) {
+	if(%n < 0)
+		%f = -1;
+	else
+		%f = 1;
+	%b = 0;
+	return mfloor(%n+(%b*%f));
+}
+
+function convertToTime(%time)
+{
+	%mins = trunc(%time / 60);
+	%time -= %mins * 60;
+	%secs = trunc(%time);
+	%time -= %secs;
+	%hundr = %time * 100;
+	%mins = trunc(%mins);
+	%secs = trunc(%secs);
+	%hundr = trunc(%hundr);
+
+	if (%mins<10) %mins= "0" @ %mins;
+	if (%secs <10) %secs = "0" @ %secs;
+	if (%hundr <10) %hundr = "0" @ %hundr;
+
+	%timeString = %mins @ ":" @ %secs @ ":" @ %hundr;
+	return %timeString;
+}
+
+function racingGame::racerFinished(%this,%client)
+{
+    commandToClient(%client,'stopClock');
+    %this.racersFinished++;
+    echo($Sim::Time @"-"@ %this.LapStartTime);
+    %client.score = convertToTime($Sim::Time - %this.LapStartTime);
+    if (%this.playersJoined >= %this.racersFinished)
+    {
+        %this.finishRace();
+    }
+    else
+    {
+        %this.schedule(1000,"finishRace");
+    }
+}
+
+function racingGame::readScores(%this, %name)
+{
+    if(!isObject(%this.highScoreList))
+    {
+        %this.highScoreList = new ArrayObject();
+    }
+    %this.highScoreList.empty();
+    
+    if (%name $= "") return;
+	%file = new FileObject();
+	if(%file.openForRead(getPrefpath() @"/scores/" @ %name @ ".sav"))
+	{
+        while (!%file.isEof())
+        {
+            %temp = %file.readLine();
+            %this.highScoreList.add(getword(%temp,0),getword(%temp,1));
+        }
+	}
+    %file.close();
+    %file.delete();
+}
+
+function racingGame::compareScores(%this)
+{    
+    for (%clientIndex = 0; %clientIndex < ClientGroup.getCount(); %clientIndex++)
+    {
+        %client = ClientGroup.getObject(%clientIndex);
+        %this.highScoreList.add(%client.connectData, %client.score);
+    }
+    %this.highScoreList.sort(true);
+    while (%this.highScoreList.count()>10)
+    {
+        %this.highScoreList.pop_back();
+    }
+}
+
+function racingGame::writeScores(%this, %name)
+{
+    if (%name $= "") return;
+    
+	%file = new FileObject();
+	if(%file.openForWrite(getPrefpath() @"/scores/" @ %name @ ".sav"))
+	{
+        %count = %this.highScoreList.count();
+        for(%i=0;%i<%count;%i++)
+        {
+            %line = %this.highScoreList.getKey(%i) SPC %this.highScoreList.getValue(%i);
+            %file.writeLine(%line);
+        }
+		%file.close();
+	}
+	else
+	{
+		error( "Failed to open " @ %name @ " for writing" );
+	}
+	%file.delete();
+}
+
+
+function racingGame::getHighScores(%this)
+{
+   
+    //get score save 
+    %this.readScores(theLevelInfo.levelName);
+    %this.compareScores();
+    %this.writeScores(theLevelInfo.levelName);
+}
+
+function racingGame::finishRace(%this)
+{
+    //echo("race complete");
+    
+    %this.getHighScores();
+    for (%clientIndex = 0; %clientIndex < ClientGroup.getCount(); %clientIndex++)
+    {
+        %client = ClientGroup.getObject(%clientIndex);
+        commandToClient(%client,'clearRacingScores');
+        
+        for(%i=0; %i < %this.highScoreList.count(); %i++)
+        { 
+            %name = %this.highScoreList.getKey(%i);
+            %score = %this.highScoreList.getValue(%i);
+            commandToClient(%client,'addRacingScore', %name, %score);
+        }
+    }
+    
+    %this.presentScores();
+}
+
+function racingGame::presentScores(%this)
+{    
+    for (%clientIndex = 0; %clientIndex < ClientGroup.getCount(); %clientIndex++)
+    {
+        %client = ClientGroup.getObject(%clientIndex);
+        echo(%client.connectData SPC %client.score);
+    }
+}
+
+function racingGame::onClientLeaveGame(%this, %client)
+{
+   // Cleanup the camera
+   if (isObject(%client.camera))
+      %client.camera.delete();
+  
+   // Cleanup the player
+   if (isObject(%client.player))
+      %client.player.delete();
+}
+
+//-----------------------------------------------------------------------------
+// Functions that implement game-play
+// These are here for backwards compatibilty only, games and/or mods should
+// really be overloading the server and mission functions listed ubove.
+//-----------------------------------------------------------------------------
+
+//-----------------------------------------------------------------------------
+// pickPlayerSpawnPoint() is responsible for finding a valid spawn point for a
+// player.
+//-----------------------------------------------------------------------------
+function racingGame::pickPlayerSpawnPoint(%this, %i)
+{
+    if (isObject(RaceLine))
+    {
+        %spawnPoint = RaceLine.getObject(%i);
+        if (isObject(%spawnPoint))
+            return %spawnPoint;
+        error("No valid spawnpoint for racer" SPC %i @"!");            
+    }
+    error("No valid RaceLine Group!");
+    
+   // Didn't find a spawn point by looking for the groups
+   // so let's return the "default" SpawnSphere
+   // First create it if it doesn't already exist
+   if (!isObject(DefaultPlayerSpawnSphere))
+   {
+      %spawn = new SpawnSphere(DefaultPlayerSpawnSphere)
+      {
+         dataBlock      = "SpawnSphereMarker";
+         radius = 1;
+      };
+
+      // Add it to the MissionCleanup group so that it
+      // doesn't get saved to the Mission (and gets cleaned
+      // up of course)
+      MissionCleanup.add(%spawn);
+   }
+   
+   return DefaultPlayerSpawnSphere;
+}
+
+function racingGame::setSpawnPoint(%this, %client)
+{
+   // Find a spawn point for the player
+   // This function currently relies on some helper functions defined in
+   // core/scripts/spawn.cs. For custom spawn behaviors one can either
+   // override the properties on the SpawnSphere's or directly override the
+   // functions themselves.
+   %spawnPoint = %this.pickPlayerSpawnPoint(%client.racer);
+   if(isObject(%spawnPoint))
+   {
+      %client.SpawnLocation = %spawnPoint.getTransform();
+      %this.setSpawnPointComplete(%client);
+   }
+   else
+   {
+      %this.setSpawnPointFailed(%client);
+   }
+}
+
+function racingGame::setSpawnPointComplete(%this, %client)
+{
+   //Fire the signal that we are, in fact, fully finished
+   %client.GetEventManager().postEvent( "setSpawnPointComplete", %client );
+}
+
+function racingGame::setSpawnPointFailed(%this, %client)
+{
+   //Fire the signal that we are, in fact, fully finished
+   %client.GetEventManager().postEvent( "setSpawnPointFailed", %client );
+}
+
+function racingGame::onPostSpawn(%this, %client)
+{   
+   // Player setup...
+   if (%client.player.isMethod("setShapeName"))
+      %client.player.setShapeName(%client.playerName);
+      
+   %client.getEventManager().postEvent("postSpawnComplete");
+   %this.spawnFollowCam(%client);
+}
+
+
+// ----------------------------------------------------------------------------
+// Observer
+// ----------------------------------------------------------------------------
+
+function racingGame::spawnFollowCam(%this, %client)
+{
+   if (!isObject(%client.camera))
+   {
+      %client.camera = new camera(){ datablock = "followCam"; };
+   }
+   
+   //echo (%game @"\c4 -> "@ %game.class @" -> GameCore::spawnObserver");
+
+   %transform = %client.player.getTransform();
+   %client.camera.setTransform(%transform);
+   %client.camera.setOrbitMode(%client.player, %transform, 0.5, 4.5, 4.5);
+   
+   // Set control to the camera
+   %client.setControlObject(%client.camera);
+   %client.camera.scopeToClient(%client);
+}
+
+// ----------------------------------------------------------------------------
+// Scoring
+// ----------------------------------------------------------------------------
+
+// -----------------------------------------------------------------------------
+// Messages 
+// -----------------------------------------------------------------------------
+
+// ----------------------------------------------------------------------------
+// weapon HUD
+// ----------------------------------------------------------------------------

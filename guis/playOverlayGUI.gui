@@ -1,0 +1,43 @@
+//--- OBJECT WRITE BEGIN ---
+$guiContent = new GuiControl(playOverlayGUI) {
+   extent = "1280 720";
+   horizSizing = "relative";
+   vertSizing = "relative";
+   profile = "GuiDefaultProfile";
+   active = "0";
+   tooltipProfile = "GuiToolTipProfile";
+   isContainer = "1";
+   canSaveDynamicFields = "1";
+      maxSize = "1";
+      MinSize = "0.1";
+      noCursor = "1";
+      originalAssetName = "playOverlayGUI";
+
+   new GuiClockHud(raceClock) {
+      showFill = "0";
+      showFrame = "0";
+      pause = "1";
+      position = "522 6";
+      horizSizing = "relative";
+      vertSizing = "aspectBottom";
+      profile = "RaceDefaultProfile";
+      active = "0";
+      tooltipProfile = "GuiToolTipProfile";
+   };
+   new GuiTextCtrl(raceLapCount) {
+      position = "594 6";
+      horizSizing = "relative";
+      vertSizing = "aspectBottom";
+      profile = "RaceDefaultProfile";
+      active = "0";
+      tooltipProfile = "GuiToolTipProfile";
+   };
+   new GuiMLTextCtrl(scoreListText) {
+      position = "371 72";
+      extent = "537 36";
+      horizSizing = "center";
+      profile = "RaceDefaultProfile";
+      tooltipProfile = "GuiToolTipProfile";
+   };
+};
+//--- OBJECT WRITE END ---
