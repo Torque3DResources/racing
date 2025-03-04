@@ -1,0 +1,5 @@
+<GUIAsset
+    AssetName="playOverlayGUI"
+    ScriptFile="@assetFile=playOverlayGUI.tscript"
+    GUIFile="@assetFile=playOverlayGUI.gui"
+    VersionId="1"/>

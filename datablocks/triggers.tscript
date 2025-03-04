@@ -1,0 +1,15 @@
+datablock TriggerData(RacingTrigger)
+{
+   // The period is value is used to control how often the console
+   // onTriggerTick callback is called while there are any objects
+   // in the trigger.  The default value is 100 MS.
+   tickPeriodMS = 100;
+};
+
+function RacingTrigger::onInspect(%this, %obj, %inspector)
+{
+   //Find the 'game' group in the inspector
+   %group = %inspector.findExistentGroup("Game");
+   if(isObject(%group))
+      %group.addField("order", "int", "The order to enter triggers in. 0 is the initial/loop-point.");
+}
